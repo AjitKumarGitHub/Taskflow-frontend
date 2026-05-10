@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { db, addTaskForUser, getTasksForUser } from "@/lib/dummy-store";
+ import { NextRequest, NextResponse } from "next/server";
+import { db, getTasksForUser } from "@/lib/dummy-store";
 import type { Task } from "@/lib/task-types";
 
 const AUTH_COOKIE_NAME = "taskflow_jwt";
@@ -10,11 +10,13 @@ function decodeDummyToken(token: string) {
   return { userId, email };
 }
 
-function getAuth(req: Request) {
+function getAuth(req: NextRequest) {
   const cookieHeader = req.headers.get("cookie") || "";
   const match = cookieHeader.match(new RegExp(`${AUTH_COOKIE_NAME}=([^;]+)`));
   const token = match?.[1];
+
   if (!token) return undefined;
+
   try {
     return decodeDummyToken(token);
   } catch {
@@ -22,42 +24,86 @@ function getAuth(req: Request) {
   }
 }
 
-export async function GET(req: Request, ctx: { params: { id: string } }) {
+// ========================
+// GET TASK
+// ========================
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const auth = getAuth(req);
+
   if (!auth?.userId) {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    );
   }
 
+  const { id } = await params;
+
   const tasks = getTasksForUser(auth.userId);
-  const task = tasks.find((t) => t.id === ctx.params.id);
-  if (!task) return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+  const task = tasks.find((t) => t.id === id);
+
+  if (!task) {
+    return NextResponse.json(
+      { success: false, message: "Not found" },
+      { status: 404 }
+    );
+  }
+
   return NextResponse.json({ success: true, data: task });
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
+// ========================
+// UPDATE TASK
+// ========================
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const auth = getAuth(req);
+
   if (!auth?.userId) {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    );
   }
+
+  const { id } = await params;
 
   const tasks = getTasksForUser(auth.userId);
-  const idx = tasks.findIndex((t) => t.id === ctx.params.id);
-  if (idx < 0) return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+  const idx = tasks.findIndex((t) => t.id === id);
 
-  const body = (await req.json()) as { title: string; description?: string; status: Task["status"] };
-  const title = (body?.title || "").trim();
-
-  if (!title) {
-    return NextResponse.json({ success: false, message: "Title is required" }, { status: 400 });
+  if (idx < 0) {
+    return NextResponse.json(
+      { success: false, message: "Not found" },
+      { status: 404 }
+    );
   }
 
-  const now = new Date().toISOString();
+  const body = (await req.json()) as {
+    title: string;
+    description?: string;
+    status: Task["status"];
+  };
+
+  const title = body?.title?.trim();
+
+  if (!title) {
+    return NextResponse.json(
+      { success: false, message: "Title is required" },
+      { status: 400 }
+    );
+  }
+
   const updated: Task = {
     ...tasks[idx],
     title,
     description: body?.description?.trim() || undefined,
     status: body?.status || tasks[idx].status,
-    updatedAt: now,
+    updatedAt: new Date().toISOString(),
   };
 
   tasks[idx] = updated;
@@ -66,19 +112,39 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
   return NextResponse.json({ success: true, data: updated });
 }
 
-export async function DELETE(req: Request, ctx: { params: { id: string } }) {
+// ========================
+// DELETE TASK
+// ========================
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const auth = getAuth(req);
+
   if (!auth?.userId) {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    );
   }
+
+  const { id } = await params;
 
   const tasks = getTasksForUser(auth.userId);
-  const filtered = tasks.filter((t) => t.id !== ctx.params.id);
+
+  const filtered = tasks.filter((t) => t.id !== id);
+
   if (filtered.length === tasks.length) {
-    return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+    return NextResponse.json(
+      { success: false, message: "Not found" },
+      { status: 404 }
+    );
   }
+
   db.tasks.set(auth.userId, filtered);
 
-  return NextResponse.json({ success: true, message: "Deleted" });
+  return NextResponse.json({
+    success: true,
+    message: "Deleted",
+  });
 }
-
