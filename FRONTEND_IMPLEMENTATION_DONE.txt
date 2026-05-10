@@ -1,0 +1,7 @@
+Frontend Next.js + Tailwind implemented.
+- Routes: /, /login, /register, /dashboard
+- Protected dashboard via HttpOnly cookie taskflow_jwt
+- Tasks CRUD UI on dashboard
+- Dummy APIs under app/api/auth/* and app/api/tasks/*
+- Helpers under lib/*
+
